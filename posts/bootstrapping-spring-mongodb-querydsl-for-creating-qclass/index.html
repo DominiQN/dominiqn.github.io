@@ -1,0 +1,182 @@
+<!doctype html><html lang=en dir=auto>
+<head><meta charset=utf-8>
+<meta http-equiv=x-ua-compatible content="IE=edge">
+<meta name=viewport content="width=device-width,initial-scale=1,shrink-to-fit=no">
+<meta name=robots content="index, follow">
+<title>Spring MongoDB에서 QueryDSL QClass 만들기 | DominiQN</title>
+<meta name=keywords content>
+<meta name=description content="Spring Boot + MongoDB에서 org.springframework.data.mongodb.core.mapping.Document 애노테이션이 붙은 클래스로 QClass를 만들어보기">
+<meta name=author content>
+<link rel=canonical href=https://dominiqn.github.io/posts/bootstrapping-spring-mongodb-querydsl-for-creating-qclass/>
+<link crossorigin=anonymous href=/assets/css/stylesheet.min.6cba0d81b5f3f42bb578d49f402ba4175aa72b43def148780b8ad714c957c6f5.css integrity="sha256-bLoNgbXz9Cu1eNSfQCukF1qnK0Pe8Uh4C4rXFMlXxvU=" rel="preload stylesheet" as=style>
+<script defer crossorigin=anonymous src=/assets/js/highlight.min.7680afc38aa6b15ddf158a4f3780b7b1f7dde7e91d26f073e6229bb7a0793c92.js integrity="sha256-doCvw4qmsV3fFYpPN4C3sffd5+kdJvBz5iKbt6B5PJI=" onload=hljs.initHighlightingOnLoad()></script>
+<link rel=icon href=https://dominiqn.github.io/favicon.ico>
+<link rel=icon type=image/png sizes=16x16 href=https://dominiqn.github.io/favicon-16x16.png>
+<link rel=icon type=image/png sizes=32x32 href=https://dominiqn.github.io/favicon-32x32.png>
+<link rel=apple-touch-icon href=https://dominiqn.github.io/apple-touch-icon.png>
+<link rel=mask-icon href=https://dominiqn.github.io/safari-pinned-tab.svg>
+<meta name=theme-color content="#2e2e33">
+<meta name=msapplication-TileColor content="#2e2e33">
+<meta name=generator content="Hugo 0.87.0">
+<meta property="og:title" content="Spring MongoDB에서 QueryDSL QClass 만들기">
+<meta property="og:description" content="Spring Boot + MongoDB에서 org.springframework.data.mongodb.core.mapping.Document 애노테이션이 붙은 클래스로 QClass를 만들어보기">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://dominiqn.github.io/posts/bootstrapping-spring-mongodb-querydsl-for-creating-qclass/"><meta property="article:section" content="posts">
+<meta property="article:published_time" content="2021-08-15T10:59:17+00:00">
+<meta property="article:modified_time" content="2021-08-15T10:59:17+00:00">
+<meta name=twitter:card content="summary">
+<meta name=twitter:title content="Spring MongoDB에서 QueryDSL QClass 만들기">
+<meta name=twitter:description content="Spring Boot + MongoDB에서 org.springframework.data.mongodb.core.mapping.Document 애노테이션이 붙은 클래스로 QClass를 만들어보기">
+<script type=application/ld+json>{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Posts","item":"https://dominiqn.github.io/posts/"},{"@type":"ListItem","position":2,"name":"Spring MongoDB에서 QueryDSL QClass 만들기","item":"https://dominiqn.github.io/posts/bootstrapping-spring-mongodb-querydsl-for-creating-qclass/"}]}</script>
+<script type=application/ld+json>{"@context":"https://schema.org","@type":"BlogPosting","headline":"Spring MongoDB에서 QueryDSL QClass 만들기","name":"Spring MongoDB에서 QueryDSL QClass 만들기","description":"Spring Boot + MongoDB에서 org.springframework.data.mongodb.core.mapping.Document 애노테이션이 붙은 클래스로 QClass를 만들어보기","keywords":[],"articleBody":"Spring에서 MongoDB와 QueryDSL을 같이 사용하는 예제를 검색해보면 QClass를 생성하기 위해, 위 설정처럼 jpa 설정을 찾아서 사용하는 예제들이 많아 참 안타까웠다.\n@Document가 붙은 클래스들만으로도 QClass를 만들 수 있는 쉬운 방법을 공유하고자 한다.\n 예시 코드는 모두 Kotlin으로 작성되었다.\n 아래 제시한 방법은 다음 두 환경에서 적용해 정상 작동함을 확인했다.\n   kotiln: 1.3.72 jdk: 11 spring boot: 2.3.3 querydsl: 4.3.1     kotlin: 1.4.30 jdk: 11 spring boot: 2.4.9 querydsl: 4.4.0    // build.gradle.kts  plugins { val kotlinVersion = \"1.3.72\" id(\"org.springframework.boot\") version \"2.3.3.RELEASE\" id(\"io.spring.dependency-management\") version \"1.0.10.RELEASE\" kotlin(\"jvm\") version kotlinVersion kotlin(\"plugin.spring\") version kotlinVersion // (1)  kotlin(\"kapt\") version kotlinVersion } /* * (...) */ dependencies { /* * (...) */ implementation(\"org.springframework.boot:spring-boot-starter-data-mongodb\") // (2)  val querydslVersion = \"4.3.1\" implementation(\"com.querydsl:querydsl-apt:$querydslVersion\") implementation(\"com.querydsl:querydsl-mongodb:$querydslVersion\") kapt(\"com.querydsl:querydsl-apt\") } // (3) kapt { annotationProcessor(\"org.springframework.data.mongodb.repository.support.MongoAnnotationProcessor\") } /* * (...) */ (1) Kotlin에서 annotation processing을 사용하기 위한 플러그인이다.\n(2) mongodb에서 QueryDSL을 사용하기 위한 의존성이다.\n(3) 이것이 @Document 애노테이션이 달린 클래스를 QClass로 만들어주는 핵심이라고 볼 수 있는데, 해당 클래스는 다음과 같다.\npackage org.springframework.data.mongodb.repository.support; // import ...  /** * Annotation processor to create Querydsl query types for QueryDsl annotated classes. * * @author Oliver Gierke * @author Owen Q */ @SupportedAnnotationTypes({ \"com.querydsl.core.annotations.*\", \"org.springframework.data.mongodb.core.mapping.*\" }) @SupportedSourceVersion(SourceVersion.RELEASE_6) public class MongoAnnotationProcessor extends AbstractQuerydslProcessor { /* * (non-Javadoc) * @see com.querydsl.apt.AbstractQuerydslProcessor#createConfiguration(javax.annotation.processing.RoundEnvironment) */ @Override protected Configuration createConfiguration(@Nullable RoundEnvironment roundEnv) { processingEnv.getMessager().printMessage(Diagnostic.Kind.NOTE, \"Running \" + getClass().getSimpleName()); DefaultConfiguration configuration = new DefaultConfiguration(processingEnv, roundEnv, Collections.emptySet(), QueryEntities.class, Document.class, QuerySupertype.class, QueryEmbeddable.class, QueryEmbedded.class, QueryTransient.class); configuration.setUnknownAsEmbedded(true); return configuration; } } @Document annotation이 달린 class를 QueryDSL의 entity 클래스로 볼 수 있도록 DefaultConfiguration 객체를 생성한다.\n결국 핵심은 org.springframework.data.mongodb.repository.support.MongoAnnotationProcessor를 이용해서 QClass를 만드는 것이기 때문에 Java, Maven, groovy(build.gradle)를 사용하는 분들은 각자의 환경에서 MongoAnnotationProcessor를 사용하는 방법을 찾아 적용하면 된다.\n","wordCount":"260","inLanguage":"en","datePublished":"2021-08-15T10:59:17.118Z","dateModified":"2021-08-15T10:59:17.118Z","mainEntityOfPage":{"@type":"WebPage","@id":"https://dominiqn.github.io/posts/bootstrapping-spring-mongodb-querydsl-for-creating-qclass/"},"publisher":{"@type":"Organization","name":"DominiQN","logo":{"@type":"ImageObject","url":"https://dominiqn.github.io/favicon.ico"}}}</script>
+</head>
+<body id=top>
+<script>localStorage.getItem("pref-theme")==="dark"?document.body.classList.add('dark'):localStorage.getItem("pref-theme")==="light"?document.body.classList.remove('dark'):window.matchMedia('(prefers-color-scheme: dark)').matches&&document.body.classList.add('dark')</script>
+<noscript>
+<style type=text/css>#theme-toggle,.top-link{display:none}</style>
+<style>@media(prefers-color-scheme:dark){:root{--theme:#1d1e20;--entry:#2e2e33;--primary:rgba(255, 255, 255, 0.84);--secondary:rgba(255, 255, 255, 0.56);--tertiary:rgba(255, 255, 255, 0.16);--content:rgba(255, 255, 255, 0.74);--hljs-bg:#2e2e33;--code-bg:#37383e;--border:#333}.list{background:var(--theme)}.list:not(.dark)::-webkit-scrollbar-track{background:0 0}.list:not(.dark)::-webkit-scrollbar-thumb{border-color:var(--theme)}}</style>
+</noscript>
+<header class=header>
+<nav class=nav>
+<div class=logo>
+<a href=https://dominiqn.github.io/ accesskey=h title="DominiQN (Alt + H)">DominiQN</a>
+<span class=logo-switches>
+<button id=theme-toggle accesskey=t title="(Alt + T)"><svg id="moon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentcolor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg><svg id="sun" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentcolor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+</button>
+</span>
+</div>
+<ul id=menu>
+</ul>
+</nav>
+</header>
+<main class=main>
+<article class=post-single>
+<header class=post-header>
+<h1 class=post-title>
+Spring MongoDB에서 QueryDSL QClass 만들기
+</h1>
+<div class=post-description>
+Spring Boot + MongoDB에서 org.springframework.data.mongodb.core.mapping.Document 애노테이션이 붙은 클래스로 QClass를 만들어보기
+</div>
+<div class=post-meta>August 15, 2021
+</div>
+</header>
+<div class=post-content><p>Spring에서 MongoDB와 QueryDSL을 같이 사용하는 예제를 검색해보면 QClass를 생성하기 위해, 위 설정처럼 jpa 설정을 찾아서 사용하는 예제들이 많아 참 안타까웠다.</p>
+<p>@Document가 붙은 클래스들만으로도 QClass를 만들 수 있는 쉬운 방법을 공유하고자 한다.</p>
+<blockquote>
+<p>예시 코드는 모두 Kotlin으로 작성되었다.</p>
+</blockquote>
+<p>아래 제시한 방법은 다음 두 환경에서 적용해 정상 작동함을 확인했다.</p>
+<ol>
+<li>
+<ul>
+<li>kotiln: 1.3.72</li>
+<li>jdk: 11</li>
+<li>spring boot: 2.3.3</li>
+<li>querydsl: 4.3.1</li>
+</ul>
+</li>
+<li>
+<ul>
+<li>kotlin: 1.4.30</li>
+<li>jdk: 11</li>
+<li>spring boot: 2.4.9</li>
+<li>querydsl: 4.4.0</li>
+</ul>
+</li>
+</ol>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-kotlin data-lang=kotlin><span style=color:#75715e>// build.gradle.kts
+</span><span style=color:#75715e></span>
+plugins {
+    <span style=color:#66d9ef>val</span> kotlinVersion = <span style=color:#e6db74>&#34;1.3.72&#34;</span>
+    id(<span style=color:#e6db74>&#34;org.springframework.boot&#34;</span>) version <span style=color:#e6db74>&#34;2.3.3.RELEASE&#34;</span>
+    id(<span style=color:#e6db74>&#34;io.spring.dependency-management&#34;</span>) version <span style=color:#e6db74>&#34;1.0.10.RELEASE&#34;</span>
+    kotlin(<span style=color:#e6db74>&#34;jvm&#34;</span>) version kotlinVersion
+    kotlin(<span style=color:#e6db74>&#34;plugin.spring&#34;</span>) version kotlinVersion
+    <span style=color:#75715e>// (1)
+</span><span style=color:#75715e></span>    kotlin(<span style=color:#e6db74>&#34;kapt&#34;</span>) version kotlinVersion
+}
+
+<span style=color:#75715e>/*
+</span><span style=color:#75715e> * (...)
+</span><span style=color:#75715e> */</span>
+
+dependencies {
+    <span style=color:#75715e>/*
+</span><span style=color:#75715e>     * (...)
+</span><span style=color:#75715e>     */</span>
+    implementation(<span style=color:#e6db74>&#34;org.springframework.boot:spring-boot-starter-data-mongodb&#34;</span>)
+
+    <span style=color:#75715e>// (2)
+</span><span style=color:#75715e></span>    <span style=color:#66d9ef>val</span> querydslVersion = <span style=color:#e6db74>&#34;4.3.1&#34;</span>
+    implementation(<span style=color:#e6db74>&#34;com.querydsl:querydsl-apt:</span><span style=color:#e6db74>$querydslVersion</span><span style=color:#e6db74>&#34;</span>)
+    implementation(<span style=color:#e6db74>&#34;com.querydsl:querydsl-mongodb:</span><span style=color:#e6db74>$querydslVersion</span><span style=color:#e6db74>&#34;</span>)
+    kapt(<span style=color:#e6db74>&#34;com.querydsl:querydsl-apt&#34;</span>)
+}
+
+<span style=color:#75715e>// (3)
+</span><span style=color:#75715e></span>kapt {
+    annotationProcessor(<span style=color:#e6db74>&#34;org.springframework.data.mongodb.repository.support.MongoAnnotationProcessor&#34;</span>)
+}
+<span style=color:#75715e>/*
+</span><span style=color:#75715e> * (...)
+</span><span style=color:#75715e> */</span>
+
+</code></pre></div><p>(1) Kotlin에서 annotation processing을 사용하기 위한 플러그인이다.</p>
+<p>(2) mongodb에서 QueryDSL을 사용하기 위한 의존성이다.</p>
+<p>(3) 이것이 @Document 애노테이션이 달린 클래스를 QClass로 만들어주는 핵심이라고 볼 수 있는데, 해당 클래스는 다음과 같다.</p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-java data-lang=java><span style=color:#f92672>package</span> org.springframework.data.mongodb.repository.support<span style=color:#f92672>;</span>
+
+<span style=color:#75715e>// import ...
+</span><span style=color:#75715e></span>
+<span style=color:#75715e>/**
+</span><span style=color:#75715e> * Annotation processor to create Querydsl query types for QueryDsl annotated classes.
+</span><span style=color:#75715e> *
+</span><span style=color:#75715e> * @author Oliver Gierke
+</span><span style=color:#75715e> * @author Owen Q
+</span><span style=color:#75715e> */</span>
+<span style=color:#a6e22e>@SupportedAnnotationTypes</span><span style=color:#f92672>({</span> <span style=color:#e6db74>&#34;com.querydsl.core.annotations.*&#34;</span><span style=color:#f92672>,</span> <span style=color:#e6db74>&#34;org.springframework.data.mongodb.core.mapping.*&#34;</span> <span style=color:#f92672>})</span>
+<span style=color:#a6e22e>@SupportedSourceVersion</span><span style=color:#f92672>(</span>SourceVersion<span style=color:#f92672>.</span><span style=color:#a6e22e>RELEASE_6</span><span style=color:#f92672>)</span>
+<span style=color:#66d9ef>public</span> <span style=color:#66d9ef>class</span> <span style=color:#a6e22e>MongoAnnotationProcessor</span> <span style=color:#66d9ef>extends</span> AbstractQuerydslProcessor <span style=color:#f92672>{</span>
+
+	<span style=color:#75715e>/*
+</span><span style=color:#75715e>	 * (non-Javadoc)
+</span><span style=color:#75715e>	 * @see com.querydsl.apt.AbstractQuerydslProcessor#createConfiguration(javax.annotation.processing.RoundEnvironment)
+</span><span style=color:#75715e>	 */</span>
+	<span style=color:#a6e22e>@Override</span>
+	<span style=color:#66d9ef>protected</span> Configuration <span style=color:#a6e22e>createConfiguration</span><span style=color:#f92672>(</span><span style=color:#a6e22e>@Nullable</span> RoundEnvironment roundEnv<span style=color:#f92672>)</span> <span style=color:#f92672>{</span>
+
+		processingEnv<span style=color:#f92672>.</span><span style=color:#a6e22e>getMessager</span><span style=color:#f92672>().</span><span style=color:#a6e22e>printMessage</span><span style=color:#f92672>(</span>Diagnostic<span style=color:#f92672>.</span><span style=color:#a6e22e>Kind</span><span style=color:#f92672>.</span><span style=color:#a6e22e>NOTE</span><span style=color:#f92672>,</span> <span style=color:#e6db74>&#34;Running &#34;</span> <span style=color:#f92672>+</span> getClass<span style=color:#f92672>().</span><span style=color:#a6e22e>getSimpleName</span><span style=color:#f92672>());</span>
+
+		DefaultConfiguration configuration <span style=color:#f92672>=</span> <span style=color:#66d9ef>new</span> DefaultConfiguration<span style=color:#f92672>(</span>processingEnv<span style=color:#f92672>,</span> roundEnv<span style=color:#f92672>,</span> Collections<span style=color:#f92672>.</span><span style=color:#a6e22e>emptySet</span><span style=color:#f92672>(),</span>
+				QueryEntities<span style=color:#f92672>.</span><span style=color:#a6e22e>class</span><span style=color:#f92672>,</span> Document<span style=color:#f92672>.</span><span style=color:#a6e22e>class</span><span style=color:#f92672>,</span> QuerySupertype<span style=color:#f92672>.</span><span style=color:#a6e22e>class</span><span style=color:#f92672>,</span> QueryEmbeddable<span style=color:#f92672>.</span><span style=color:#a6e22e>class</span><span style=color:#f92672>,</span> QueryEmbedded<span style=color:#f92672>.</span><span style=color:#a6e22e>class</span><span style=color:#f92672>,</span>
+				QueryTransient<span style=color:#f92672>.</span><span style=color:#a6e22e>class</span><span style=color:#f92672>);</span>
+		configuration<span style=color:#f92672>.</span><span style=color:#a6e22e>setUnknownAsEmbedded</span><span style=color:#f92672>(</span><span style=color:#66d9ef>true</span><span style=color:#f92672>);</span>
+
+		<span style=color:#66d9ef>return</span> configuration<span style=color:#f92672>;</span>
+	<span style=color:#f92672>}</span>
+<span style=color:#f92672>}</span>
+</code></pre></div><p><code>@Document</code> annotation이 달린 class를 QueryDSL의 entity 클래스로 볼 수 있도록 <code>DefaultConfiguration</code> 객체를 생성한다.</p>
+<p>결국 핵심은 <code>org.springframework.data.mongodb.repository.support.MongoAnnotationProcessor</code>를 이용해서 QClass를 만드는 것이기 때문에 Java, Maven, groovy(build.gradle)를 사용하는 분들은 각자의 환경에서 <code>MongoAnnotationProcessor</code>를 사용하는 방법을 찾아 적용하면 된다.</p>
+</div>
+<footer class=post-footer>
+</footer>
+</article>
+</main>
+<footer class=footer>
+<span>&copy; 2021 <a href=https://dominiqn.github.io/>DominiQN</a></span>
+<span>
+Powered by
+<a href=https://gohugo.io/ rel="noopener noreferrer" target=_blank>Hugo</a> &
+        <a href=https://git.io/hugopapermod rel=noopener target=_blank>PaperMod</a>
+</span>
+</footer>
+<a href=#top aria-label="go to top" title="Go to Top (Alt + G)">
+<button class=top-link id=top-link type=button accesskey=g><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12 6" fill="currentcolor"><path d="M12 6H0l6-6z"/></svg>
+</button>
+</a>
+<script>let menu=document.getElementById('menu');menu.scrollLeft=localStorage.getItem("menu-scroll-position"),menu.onscroll=function(){localStorage.setItem("menu-scroll-position",menu.scrollLeft)},document.querySelectorAll('a[href^="#"]').forEach(a=>{a.addEventListener("click",function(b){b.preventDefault();var a=this.getAttribute("href").substr(1);window.matchMedia('(prefers-reduced-motion: reduce)').matches?document.querySelector(`[id='${decodeURIComponent(a)}']`).scrollIntoView():document.querySelector(`[id='${decodeURIComponent(a)}']`).scrollIntoView({behavior:"smooth"}),a==="top"?history.replaceState(null,null," "):history.pushState(null,null,`#${a}`)})})</script>
+<script>var mybutton=document.getElementById("top-link");window.onscroll=function(){document.body.scrollTop>800||document.documentElement.scrollTop>800?(mybutton.style.visibility="visible",mybutton.style.opacity="1"):(mybutton.style.visibility="hidden",mybutton.style.opacity="0")}</script>
+<script>document.getElementById("theme-toggle").addEventListener("click",()=>{document.body.className.includes("dark")?(document.body.classList.remove('dark'),localStorage.setItem("pref-theme",'light')):(document.body.classList.add('dark'),localStorage.setItem("pref-theme",'dark'))})</script>
+</body>
+</html>
